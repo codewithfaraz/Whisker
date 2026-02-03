@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import ProductCard from "@/app/components/ProductCard";
 import CategoryTabs from "@/app/components/CategoryTabs";
 import { products, searchProducts } from "@/app/lib/data";
-import { SlidersHorizontal, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, Loader2 } from "lucide-react";
 
 type SortOption = "popular" | "newest" | "price-asc" | "price-desc" | "rating";
 
@@ -17,7 +17,7 @@ const sortOptions: { value: SortOption; label: string }[] = [
   { value: "rating", label: "Highest Rated" },
 ];
 
-export default function ProductsPage() {
+function ProductsContent() {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
 
@@ -197,5 +197,20 @@ export default function ProductsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-32 flex flex-col items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-(--color-primary) mb-4" />
+          <p className="text-(--color-text-secondary)">Loading products...</p>
+        </div>
+      }
+    >
+      <ProductsContent />
+    </Suspense>
   );
 }
