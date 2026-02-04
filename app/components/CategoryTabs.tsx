@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   UtensilsCrossed,
@@ -24,15 +25,56 @@ interface CategoryTabsProps {
   activeCategory?: string;
 }
 
+interface CategoryCount {
+  slug: string;
+  name: string;
+  count: number;
+}
+
 export default function CategoryTabs({
   activeCategory = "all",
 }: CategoryTabsProps) {
+  const [counts, setCounts] = useState<{
+    total: number;
+    categories: CategoryCount[];
+  }>({
+    total: 0,
+    categories: [],
+  });
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const response = await fetch("/api/v1/categories/counts");
+        const data = await response.json();
+        if (data.success) {
+          setCounts({
+            total: data.total,
+            categories: data.categories,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch category counts:", error);
+      }
+    };
+
+    fetchCounts();
+  }, []);
+
+  // Get count for a specific category
+  const getCount = (slug: string): number => {
+    if (slug === "all") return counts.total;
+    const cat = counts.categories.find((c) => c.slug === slug);
+    return cat?.count || 0;
+  };
+
   return (
     <div className="sticky top-16 z-40 bg-white border-b border-(--color-border-light)">
       <div className="container">
         <div className="flex overflow-x-auto no-scrollbar py-3 gap-2 sm:gap-3">
           {categories.map((category) => {
             const isActive = activeCategory === category.slug;
+            const count = getCount(category.slug);
             return (
               <Link
                 key={category.id}
@@ -56,7 +98,7 @@ export default function CategoryTabs({
                       : "bg-(--color-surface) text-(--color-text-muted)"
                   }`}
                 >
-                  {category.productCount}
+                  {count}
                 </span>
               </Link>
             );

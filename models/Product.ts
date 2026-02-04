@@ -143,13 +143,18 @@ const ProductSchema = new Schema<IProduct>(
   },
 );
 
-// Create slug from name before saving
+// Create slug from name and set inStock based on stockCount before saving
 ProductSchema.pre("save", async function () {
   if (this.isModified("name")) {
     this.slug = this.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+  }
+
+  // Automatically set inStock based on stockCount
+  if (this.isModified("stockCount") || this.isNew) {
+    this.inStock = this.stockCount > 0;
   }
 });
 

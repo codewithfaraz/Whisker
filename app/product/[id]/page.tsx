@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -13,14 +13,15 @@ import {
   RotateCcw,
   Shield,
   ChevronRight,
+  Loader2,
+  AlertCircle,
+  PenLine,
 } from "lucide-react";
-import {
-  getProductBySlug,
-  getRelatedProducts,
-  getProductReviews,
-} from "@/app/lib/data";
 import { useCart } from "@/app/context/cart-context";
 import ProductCard from "@/app/components/ProductCard";
+import ReviewModal from "@/app/components/ReviewModal";
+import { Product, Review } from "@/app/lib/types";
+import { getProductBySlug, getRelatedProducts } from "@/app/lib/data";
 
 interface ProductPageProps {
   params: Promise<{ id: string }>;
@@ -28,9 +29,23 @@ interface ProductPageProps {
 
 export default function ProductPage({ params }: ProductPageProps) {
   const { id: slug } = use(params);
-  const product = getProductBySlug(slug);
   const { addToCart, isInCart } = useCart();
 
+  // Product state - first try API, fallback to mock data
+  const [product, setProduct] = useState<Product | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reviews state
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewStats, setReviewStats] = useState({
+    averageRating: 0,
+    totalReviews: 0,
+  });
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+  // UI state
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariants, setSelectedVariants] = useState<{
@@ -40,11 +55,116 @@ export default function ProductPage({ params }: ProductPageProps) {
     "description" | "reviews" | "shipping"
   >("description");
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
-  if (!product) {
+  // Fetch product data
+  useEffect(() => {
+    const fetchProduct = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // First, try to get from API
+        const response = await fetch(`/api/v1/products?slug=${slug}`);
+        const data = await response.json();
+
+        if (data.success && data.products && data.products.length > 0) {
+          setProduct(data.products[0]);
+          // Fetch related products from same category
+          const relatedResponse = await fetch(
+            `/api/v1/products?category=${data.products[0].categorySlug}&limit=5`,
+          );
+          const relatedData = await relatedResponse.json();
+          if (relatedData.success) {
+            setRelatedProducts(
+              relatedData.products
+                .filter((p: Product) => p.id !== data.products[0].id)
+                .slice(0, 4),
+            );
+          }
+        } else {
+          // Fallback to mock data if not in API
+          const mockProduct = getProductBySlug(slug);
+          if (mockProduct) {
+            setProduct(mockProduct);
+            setRelatedProducts(getRelatedProducts(mockProduct, 4));
+          } else {
+            setError("Product not found");
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching product:", err);
+        // On API error, try mock data
+        const mockProduct = getProductBySlug(slug);
+        if (mockProduct) {
+          setProduct(mockProduct);
+          setRelatedProducts(getRelatedProducts(mockProduct, 4));
+        } else {
+          setError("Failed to load product");
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProduct();
+  }, [slug]);
+
+  // Fetch reviews
+  const fetchReviews = useCallback(async () => {
+    if (!product?.id) return;
+
+    setIsLoadingReviews(true);
+    try {
+      const response = await fetch(`/api/v1/reviews?productId=${product.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setReviews(data.reviews || []);
+        setReviewStats(data.stats || { averageRating: 0, totalReviews: 0 });
+      }
+    } catch (err) {
+      console.error("Error fetching reviews:", err);
+    } finally {
+      setIsLoadingReviews(false);
+    }
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (product?.id) {
+      fetchReviews();
+    }
+  }, [product?.id, fetchReviews]);
+
+  const handleAddToCart = () => {
+    if (product) {
+      addToCart(product, quantity, selectedVariants);
+    }
+  };
+
+  const handleVariantChange = (variantId: string, optionValue: string) => {
+    setSelectedVariants((prev) => ({ ...prev, [variantId]: optionValue }));
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="container py-32 flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-(--color-primary) mb-4" />
+        <p className="text-(--color-text-secondary)">Loading product...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !product) {
     return (
       <div className="container py-16 text-center">
+        <AlertCircle className="w-12 h-12 text-(--color-error) mx-auto mb-4" />
         <h1 className="text-2xl font-semibold mb-4">Product Not Found</h1>
+        <p className="text-(--color-text-secondary) mb-6">
+          {error || "The product you're looking for doesn't exist."}
+        </p>
         <Link href="/products" className="btn btn-primary">
           Browse Products
         </Link>
@@ -52,23 +172,20 @@ export default function ProductPage({ params }: ProductPageProps) {
     );
   }
 
-  const relatedProducts = getRelatedProducts(product, 4);
-  const reviews = getProductReviews(product.id);
   const inCart = isInCart(product.id);
-
-  const handleAddToCart = () => {
-    addToCart(product, quantity, selectedVariants);
-  };
-
-  const handleVariantChange = (variantId: string, optionValue: string) => {
-    setSelectedVariants((prev) => ({ ...prev, [variantId]: optionValue }));
-  };
-
   const discount = product.originalPrice
     ? Math.round(
         ((product.originalPrice - product.price) / product.originalPrice) * 100,
       )
     : 0;
+
+  // Use API review stats if available, otherwise fallback to product data
+  const displayRating =
+    reviewStats.totalReviews > 0 ? reviewStats.averageRating : product.rating;
+  const displayReviewCount =
+    reviewStats.totalReviews > 0
+      ? reviewStats.totalReviews
+      : product.reviewCount;
 
   return (
     <div className="container py-6">
@@ -170,7 +287,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                 <Star
                   key={i}
                   className={`w-4 h-4 ${
-                    i < Math.floor(product.rating)
+                    i < Math.floor(displayRating)
                       ? "text-(--color-warning) fill-current"
                       : "text-(--color-border)"
                   }`}
@@ -178,7 +295,7 @@ export default function ProductPage({ params }: ProductPageProps) {
               ))}
             </div>
             <span className="text-sm text-(--color-text-secondary)">
-              {product.rating} ({product.reviewCount} reviews)
+              {displayRating} ({displayReviewCount} reviews)
             </span>
           </div>
 
@@ -328,7 +445,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                   : "border-transparent text-(--color-text-secondary) hover:text-(--color-text)"
               }`}
             >
-              {tab} {tab === "reviews" && `(${reviews.length})`}
+              {tab} {tab === "reviews" && `(${displayReviewCount})`}
             </button>
           ))}
         </div>
@@ -361,7 +478,27 @@ export default function ProductPage({ params }: ProductPageProps) {
 
           {activeTab === "reviews" && (
             <div>
-              {reviews.length > 0 ? (
+              {/* Write Review Button */}
+              <div className="flex items-center justify-between mb-6">
+                <p className="text-sm text-(--color-text-secondary)">
+                  {displayReviewCount > 0
+                    ? `${displayReviewCount} customer ${displayReviewCount === 1 ? "review" : "reviews"}`
+                    : "No reviews yet"}
+                </p>
+                <button
+                  onClick={() => setShowReviewModal(true)}
+                  className="btn btn-primary text-sm"
+                >
+                  <PenLine className="w-4 h-4" />
+                  Write a Review
+                </button>
+              </div>
+
+              {isLoadingReviews ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-(--color-primary)" />
+                </div>
+              ) : reviews.length > 0 ? (
                 <div className="space-y-6">
                   {reviews.map((review) => (
                     <div
@@ -378,7 +515,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                           )}
                         </div>
                         <span className="text-xs text-(--color-text-muted)">
-                          {review.date}
+                          {new Date(review.date).toLocaleDateString()}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 mb-2">
@@ -403,9 +540,18 @@ export default function ProductPage({ params }: ProductPageProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-(--color-text-secondary) text-center py-8">
-                  No reviews yet. Be the first to review this product!
-                </p>
+                <div className="text-center py-8 bg-(--color-bg-secondary) rounded-lg">
+                  <p className="text-(--color-text-secondary) mb-4">
+                    No reviews yet. Be the first to review this product!
+                  </p>
+                  <button
+                    onClick={() => setShowReviewModal(true)}
+                    className="btn btn-primary"
+                  >
+                    <PenLine className="w-4 h-4" />
+                    Write a Review
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -455,6 +601,15 @@ export default function ProductPage({ params }: ProductPageProps) {
           </div>
         </section>
       )}
+
+      {/* Review Modal */}
+      <ReviewModal
+        isOpen={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        productId={product.id}
+        productName={product.name}
+        onReviewSubmitted={fetchReviews}
+      />
     </div>
   );
 }

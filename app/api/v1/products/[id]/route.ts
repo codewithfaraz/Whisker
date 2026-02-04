@@ -109,11 +109,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
         .replace(/(^-|-$)/g, "");
     }
     if (tags !== undefined) updateData.tags = tags;
-    if (stockCount !== undefined)
-      updateData.stockCount = parseInt(stockCount) || 0;
+    if (stockCount !== undefined) {
+      const parsedStockCount = parseInt(stockCount) || 0;
+      updateData.stockCount = parsedStockCount;
+      updateData.inStock = parsedStockCount > 0;
+    }
     if (variants !== undefined) updateData.variants = variants;
     if (features !== undefined) updateData.features = features;
-    if (inStock !== undefined) updateData.inStock = inStock;
+    // inStock is now auto-calculated from stockCount, ignore explicit value
     if (isFeatured !== undefined) updateData.isFeatured = isFeatured;
     if (isNew !== undefined) updateData.isNewArrival = isNew;
     if (isBestseller !== undefined) updateData.isBestseller = isBestseller;

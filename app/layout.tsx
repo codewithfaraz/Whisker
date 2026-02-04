@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Whisker's Haven | A Premium Cat Store",
+  title: "",
   description:
     "Premium products for your beloved feline companions. Quality, comfort, and style for every cat.",
   keywords: [
@@ -28,7 +28,8 @@ export const metadata: Metadata = {
     "pet supplies",
   ],
   openGraph: {
-    title: "Whisker's Haven | A Premium Cat Store",
+    // Whisker's Haven | A Premium Cat Store
+    title: "",
     description: "Premium products for your beloved feline companions.",
     type: "website",
   },

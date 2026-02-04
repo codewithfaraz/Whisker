@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import ProductCard from "@/app/components/ProductCard";
 import CategoryTabs from "@/app/components/CategoryTabs";
-import { getProductsByCategory, categories } from "@/app/lib/data";
-import { SlidersHorizontal, ChevronDown } from "lucide-react";
+import { categories } from "@/app/lib/data";
+import { Product } from "@/app/lib/types";
+import {
+  SlidersHorizontal,
+  ChevronDown,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 
 type SortOption = "popular" | "newest" | "price-asc" | "price-desc" | "rating";
@@ -24,49 +31,83 @@ interface CategoryPageProps {
 export default function CategoryPage({ params }: CategoryPageProps) {
   const { category } = use(params);
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [sortBy, setSortBy] = useState<SortOption>("popular");
   const [showFilters, setShowFilters] = useState(false);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 100]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 500]);
   const [inStockOnly, setInStockOnly] = useState(false);
 
   const categoryInfo = categories.find((c) => c.slug === category);
-  const categoryProducts = getProductsByCategory(category);
 
-  // Filter and sort products
-  const filteredProducts = useMemo(() => {
-    let result = [...categoryProducts];
+  // Fetch products from API
+  const fetchProducts = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-    // Apply filters
-    if (inStockOnly) {
-      result = result.filter((p) => p.inStock);
+    try {
+      // Build sort params for API
+      let sortByParam = "createdAt";
+      let sortOrderParam = "desc";
+
+      switch (sortBy) {
+        case "newest":
+          sortByParam = "createdAt";
+          sortOrderParam = "desc";
+          break;
+        case "price-asc":
+          sortByParam = "price";
+          sortOrderParam = "asc";
+          break;
+        case "price-desc":
+          sortByParam = "price";
+          sortOrderParam = "desc";
+          break;
+        case "rating":
+          sortByParam = "rating";
+          sortOrderParam = "desc";
+          break;
+        case "popular":
+        default:
+          sortByParam = "reviewCount";
+          sortOrderParam = "desc";
+      }
+
+      const params = new URLSearchParams({
+        category: category,
+        sortBy: sortByParam,
+        sortOrder: sortOrderParam,
+        limit: "100",
+      });
+
+      const response = await fetch(`/api/v1/products?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setProducts(data.products || []);
+      } else {
+        setError(data.message || "Failed to fetch products");
+      }
+    } catch (err) {
+      console.error("Error fetching products:", err);
+      setError("Failed to load products");
+    } finally {
+      setIsLoading(false);
     }
-    result = result.filter(
-      (p) => p.price >= priceRange[0] && p.price <= priceRange[1],
-    );
+  }, [category, sortBy]);
 
-    // Apply sorting
-    switch (sortBy) {
-      case "newest":
-        result = result
-          .filter((p) => p.isNew)
-          .concat(result.filter((p) => !p.isNew));
-        break;
-      case "price-asc":
-        result.sort((a, b) => a.price - b.price);
-        break;
-      case "price-desc":
-        result.sort((a, b) => b.price - a.price);
-        break;
-      case "rating":
-        result.sort((a, b) => b.rating - a.rating);
-        break;
-      case "popular":
-      default:
-        result.sort((a, b) => b.reviewCount - a.reviewCount);
-    }
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
-    return result;
-  }, [categoryProducts, sortBy, priceRange, inStockOnly]);
+  // Apply client-side filters
+  const filteredProducts = products.filter((p) => {
+    if (inStockOnly && !p.inStock) return false;
+    if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+    return true;
+  });
 
   if (!categoryInfo) {
     return (
@@ -115,6 +156,18 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Refresh Button */}
+            <button
+              onClick={fetchProducts}
+              disabled={isLoading}
+              className="p-2 text-(--color-text-secondary) hover:text-(--color-text) hover:bg-(--color-bg-secondary) rounded-lg transition-colors"
+              title="Refresh products"
+            >
+              <RefreshCw
+                className={`w-5 h-5 ${isLoading ? "animate-spin" : ""}`}
+              />
+            </button>
+
             {/* Filter Toggle */}
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -192,7 +245,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
               {/* Clear Filters */}
               <button
                 onClick={() => {
-                  setPriceRange([0, 100]);
+                  setPriceRange([0, 500]);
                   setInStockOnly(false);
                 }}
                 className="btn btn-ghost text-sm"
@@ -203,8 +256,21 @@ export default function CategoryPage({ params }: CategoryPageProps) {
           </div>
         )}
 
-        {/* Products Grid */}
-        {filteredProducts.length > 0 ? (
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Loader2 className="w-10 h-10 animate-spin text-(--color-primary) mb-4" />
+            <p className="text-(--color-text-secondary)">Loading products...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <AlertCircle className="w-10 h-10 text-(--color-error) mb-4" />
+            <p className="text-(--color-text-secondary) mb-4">{error}</p>
+            <button onClick={fetchProducts} className="btn btn-primary">
+              Try Again
+            </button>
+          </div>
+        ) : filteredProducts.length > 0 ? (
           <>
             <p className="text-sm text-(--color-text-muted) mb-4">
               {filteredProducts.length}{" "}
@@ -227,7 +293,7 @@ export default function CategoryPage({ params }: CategoryPageProps) {
             </p>
             <button
               onClick={() => {
-                setPriceRange([0, 100]);
+                setPriceRange([0, 500]);
                 setInStockOnly(false);
               }}
               className="btn btn-primary"

@@ -19,6 +19,7 @@ export interface Product {
   features?: string[];
   isFeatured?: boolean;
   isNew?: boolean;
+  isNewArrival?: boolean;
   isBestseller?: boolean;
 }
 

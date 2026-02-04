@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const search = searchParams.get("search");
     const featured = searchParams.get("featured");
+    const slug = searchParams.get("slug");
     const limit = parseInt(searchParams.get("limit") || "50");
     const page = parseInt(searchParams.get("page") || "1");
     const sortBy = searchParams.get("sortBy") || "createdAt";
@@ -19,6 +20,10 @@ export async function GET(request: Request) {
     // Build query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query: any = {};
+
+    if (slug) {
+      query.slug = slug.toLowerCase();
+    }
 
     if (category) {
       query.categorySlug = category.toLowerCase();
@@ -136,6 +141,10 @@ export async function POST(request: Request) {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
 
+    // Calculate stock count and inStock status
+    const parsedStockCount = parseInt(stockCount) || 0;
+    const calculatedInStock = parsedStockCount > 0;
+
     // Create product
     const product = await Product.create({
       name,
@@ -149,10 +158,10 @@ export async function POST(request: Request) {
       category,
       categorySlug,
       tags: tags || [],
-      stockCount: parseInt(stockCount) || 0,
+      stockCount: parsedStockCount,
       variants: variants || [],
       features: features || [],
-      inStock: inStock ?? true,
+      inStock: calculatedInStock,
       isFeatured: isFeatured ?? false,
       isNewArrival: isNew ?? true,
       isBestseller: isBestseller ?? false,
