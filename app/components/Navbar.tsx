@@ -277,7 +277,7 @@ export default function Navbar() {
                       searchQuery.length >= 2 && setShowResults(true)
                     }
                     placeholder="Search products..."
-                    className="input pl-10 text-sm"
+                    className="input pl-11! text-sm"
                   />
                 </div>
               </form>

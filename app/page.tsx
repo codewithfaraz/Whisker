@@ -19,8 +19,11 @@ import {
   Star,
   ArrowRight,
   Cat,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "react-hot-toast";
 
 // Trust badges data
 const trustBadges = [
@@ -83,6 +86,48 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [featuredScrollPos, setFeaturedScrollPos] = useState(0);
   const featuredRef = useRef<HTMLDivElement>(null);
+
+  // Subscription state
+  const [subscribeEmail, setSubscribeEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showThankYou, setShowThankYou] = useState(false);
+
+  // Auto-close Thank You modal
+  useEffect(() => {
+    if (showThankYou) {
+      const timer = setTimeout(() => {
+        setShowThankYou(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showThankYou]);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subscribeEmail) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/v1/subscribers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: subscribeEmail }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setShowThankYou(true);
+        setSubscribeEmail("");
+      } else {
+        toast.error(data.message || "Something went wrong");
+      }
+    } catch (error) {
+      toast.error("Failed to subscribe. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Auto-advance hero slider
   useEffect(() => {
@@ -186,7 +231,7 @@ export default function Home() {
       <section
         className={`relative bg-linear-to-br ${activeSlide.bgColor} transition-all duration-700`}
       >
-        <div className="container py-8 sm:py-12 lg:py-16">
+        <div className="container pt-8 pb-14 sm:pt-12 sm:pb-20 lg:pt-16 lg:pb-24">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             {/* Hero Content */}
             <div className="order-2 lg:order-1 text-center lg:text-left">
@@ -252,7 +297,7 @@ export default function Home() {
           </div>
 
           {/* Slider Dots */}
-          <div className="flex justify-center lg:justify-start gap-2 mt-8">
+          <div className="pb-4 flex justify-center lg:justify-start gap-2 mt-8">
             {heroSlides.map((_, idx) => (
               <button
                 key={idx}
@@ -269,10 +314,10 @@ export default function Home() {
       </section>
 
       {/* Category Tabs */}
-      <CategoryTabs activeCategory="all" />
+      {/* <CategoryTabs activeCategory="all" /> */}
 
       {/* Trust Badges */}
-      <div className="bg-white border-b border-(--color-border-light)">
+      <div className="mt-4 border-(--color-border-light)">
         <div className="container py-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {trustBadges.map((badge, idx) => (
@@ -299,8 +344,8 @@ export default function Home() {
 
       {/* Featured Products Carousel */}
       {featuredProducts.length > 0 && (
-        <section className="container py-10 sm:py-14">
-          <div className="flex items-center justify-between mb-6">
+        <section className="mt-4 container py-10 sm:py-14">
+          <div className="mt-4 flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl sm:text-3xl font-semibold">
                 Featured Products
@@ -389,7 +434,7 @@ export default function Home() {
 
       {/* All Products */}
       <section className="container py-10 sm:py-14">
-        <div className="flex items-center justify-between mb-8">
+        <div className="mt-4 flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl sm:text-3xl font-semibold">
               Latest Products
@@ -447,16 +492,30 @@ export default function Home() {
                 Join our newsletter for exclusive deals, new product
                 announcements, and cat care tips!
               </p>
-              <div className="flex flex-col sm:flex-row gap-3 max-w-md">
+              <form
+                onSubmit={handleSubscribe}
+                className="flex flex-col sm:flex-row gap-3 max-w-md"
+              >
                 <input
                   type="email"
+                  required
+                  value={subscribeEmail}
+                  onChange={(e) => setSubscribeEmail(e.target.value)}
                   placeholder="Enter your email"
                   className="flex-1 px-5 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/60 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20"
                 />
-                <button className="px-6 py-3 rounded-xl bg-white text-(--color-primary) font-semibold hover:bg-white/90 transition-colors whitespace-nowrap">
-                  Subscribe
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-3 rounded-xl bg-white text-(--color-primary) font-semibold hover:bg-white/90 transition-colors whitespace-nowrap disabled:opacity-70 flex items-center justify-center min-w-[120px]"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Subscribe"
+                  )}
                 </button>
-              </div>
+              </form>
             </div>
             <div className="hidden md:block relative">
               <div className="absolute inset-0 bg-white/10 rounded-3xl" />
@@ -520,6 +579,34 @@ export default function Home() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Thank You Modal */}
+      {showThankYou && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowThankYou(false)}
+          />
+          <div className="relative bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-in zoom-in duration-300">
+            <button
+              onClick={() => setShowThankYou(false)}
+              className="absolute top-4 right-4 text-(--color-text-muted) hover:text-(--color-text) transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-10 h-10 text-green-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-(--color-text) mb-2">
+              You're on the list!
+            </h3>
+            <p className="text-(--color-text-secondary)">
+              Thank you for subscribing to our newsletter. We'll be in touch
+              with cat-tastic updates soon!
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Add floating animation keyframes */}
